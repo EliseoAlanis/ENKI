@@ -55,8 +55,8 @@ contract KahootGame {
         diplomaTokenURI = _diplomaTokenURI;
         correctAnswers = _correctAnswers;
 
-        // Desplegamos un NFT exclusivo para esta partida
-        diplomaContract = new DiplomaNFT(_professor);
+        // CAMBIO CRÍTICO APLICADO: El contrato se pasa a sí mismo como argumento
+        diplomaContract = new DiplomaNFT(address(this));
     }
 
     function startNextQuestion() external onlyProfessor {
