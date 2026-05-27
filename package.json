@@ -4,10 +4,13 @@
   "type": "module",
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^3.1.5",
+    "@nomicfoundation/hardhat-toolbox": "^7.0.0",
     "@nomicfoundation/hardhat-toolbox-viem": "^5.0.5",
     "@types/node": "^22.19.19",
+    "chai": "^6.2.2",
     "forge-std": "github:foundry-rs/forge-std#v1.9.4",
     "hardhat": "^3.4.5",
+    "mocha": "^11.7.6",
     "typescript": "~5.8.0",
     "viem": "^2.49.0"
   },

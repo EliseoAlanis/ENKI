@@ -1,26 +1,33 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract DiplomaNFT is ERC721, Ownable {
+contract DiplomaNFT is ERC721URIStorage, Ownable {
     uint256 private _nextTokenId;
+    
+    // Almacenamos la address del KahootManager
     address public kahootManager;
 
-    // Inicializamos el NFT y le asignamos el Owner (ustedes)
-    constructor(address initialOwner) ERC721("KahootDiploma", "KHDIP") Ownable(initialOwner) {}
-
-    // Función para conectar este NFT con el contrato del juego
-    function setKahootManager(address _kahootManager) external onlyOwner {
-        kahootManager = _kahootManager;
+    // Modificador para restringir el minteo solo al contrato Manager
+    modifier onlyManager() {
+        require(msg.sender == kahootManager, "Solo el Manager puede mintear");
+        _;
     }
 
-    // Solo el contrato de KahootManager puede llamar a esta función
-    function mint(address to) external {
-        require(msg.sender == kahootManager, "Solo el KahootManager puede mintear");
-        
+    constructor(address initialOwner) ERC721("Kahoot Web3 Diploma", "KWD") Ownable(initialOwner) {}
+
+    // Función que llamaremos desde el owner (tu wallet) después de desplegar ambos contratos
+    function setKahootManager(address _manager) external onlyOwner {
+        require(_manager != address(0), "Address invalida");
+        kahootManager = _manager;
+    }
+
+    // Función de minteo restringida
+    function mintDiploma(address to, string memory tokenURI) external onlyManager {
         uint256 tokenId = _nextTokenId++;
-        _safeMint(to, tokenId);
+        _mint(to, tokenId);
+        _setTokenURI(tokenId, tokenURI);
     }
 }
