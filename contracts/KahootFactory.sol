@@ -11,11 +11,11 @@ contract KahootFactory {
     function createGame(
         uint256 _passingScore,
         uint256 _totalQuestions,
-        string memory _metadataURI,
-        string memory _diplomaTokenURI,
-        uint8[] memory _correctAnswers
+        string calldata _metadataURI,
+        string calldata _diplomaTokenURI,
+        uint8[] calldata _correctAnswers
     ) external returns (address) {
-        // Desplegamos la nueva partida
+        
         KahootGame newGame = new KahootGame(
             msg.sender,
             _passingScore,
