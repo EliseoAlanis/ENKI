@@ -121,7 +121,7 @@ contract KahootGame is ReentrancyGuard {
      * Debe llamarse antes de commitAnswer(). El ETH enviado se suma al prizePool.
      */
     function joinGame() external payable {
-        require(!isFinished, "El juego ya termino");
+        require(currentQuestionId == 0 && !questions[0].commitPhaseOpen, "El juego ya comenzo o ya termino");
         require(!hasJoined[msg.sender], "Ya te uniste al juego");
         require(msg.value == entryFee, "Debes enviar exactamente el entryFee");
 
