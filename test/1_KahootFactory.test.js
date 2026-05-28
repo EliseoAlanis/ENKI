@@ -12,6 +12,7 @@ describe("KahootFactory - Creación de Juegos y Validaciones", function () {
   const diplomaURI = "ipfs://QmMockDiploma...";
   const profeSalt = "secretoProfe";
   const entryFee = parseEther("0.01");
+  const creationFee = parseEther("0.001");
 
   function generateHash(opcion, salt, address) {
     return keccak256(
@@ -41,14 +42,14 @@ describe("KahootFactory - Creación de Juegos y Validaciones", function () {
     const walletClients = await viem.getWalletClients();
     [owner, profesor, alumnoHonesto, alumnoTramposo, alumnoExtra] = walletClients;
 
-    factory = await viem.deployContract("KahootFactory");
+    factory = await viem.deployContract("KahootFactory", [creationFee]);
   });
 
   it("Factory revert si _totalQuestions == 0", async function () {
     await expectRevert(
       factory.write.createGame(
         [1n, 0n, metadataURI, diplomaURI, [], entryFee],
-        { account: profesor.account }
+        { account: profesor.account, value: creationFee }
       ),
       "Debe tener preguntas"
     );
@@ -59,7 +60,7 @@ describe("KahootFactory - Creación de Juegos y Validaciones", function () {
     await expectRevert(
       factory.write.createGame(
         [0n, 1n, metadataURI, diplomaURI, [p1], entryFee],
-        { account: profesor.account }
+        { account: profesor.account, value: creationFee }
       ),
       "Puntaje invalido"
     );
@@ -71,7 +72,7 @@ describe("KahootFactory - Creación de Juegos y Validaciones", function () {
     await expectRevert(
       factory.write.createGame(
         [5n, 2n, metadataURI, diplomaURI, [p1, p2], entryFee],
-        { account: profesor.account }
+        { account: profesor.account, value: creationFee }
       ),
       "Puntaje mayor al total"
     );
@@ -83,7 +84,7 @@ describe("KahootFactory - Creación de Juegos y Validaciones", function () {
     await expectRevert(
       factory.write.createGame(
         [2n, 3n, metadataURI, diplomaURI, [p1, p2], entryFee],
-        { account: profesor.account }
+        { account: profesor.account, value: creationFee }
       ),
       "Respuestas no coinciden"
     );
@@ -94,7 +95,7 @@ describe("KahootFactory - Creación de Juegos y Validaciones", function () {
     await expectRevert(
       factory.write.createGame(
         [1n, 1n, metadataURI, diplomaURI, [p1, p1, p1], entryFee],
-        { account: profesor.account }
+        { account: profesor.account, value: creationFee }
       ),
       "Respuestas no coinciden"
     );
@@ -106,11 +107,44 @@ describe("KahootFactory - Creación de Juegos y Validaciones", function () {
     
     await factory.write.createGame(
       [1n, 1n, metadataURI, diplomaURI, [p1], entryFee],
-      { account: profesor.account }
+      { account: profesor.account, value: creationFee }
     );
     
     const countDespues = await factory.read.getGamesCount();
     expect(countDespues).to.equal(countAntes + 1n);
+  });
+
+  it("Factory revert si no se paga la tarifa de creacion", async function () {
+    const p1 = generateHash(1, profeSalt, profesor.account.address);
+    await expectRevert(
+      factory.write.createGame(
+        [1n, 1n, metadataURI, diplomaURI, [p1], entryFee],
+        { account: profesor.account }
+      ),
+      "Tarifa de creacion insuficiente"
+    );
+  });
+
+  it("Factory: owner puede cambiar la tarifa de creacion", async function () {
+    await factory.write.setCreationFee([parseEther("0.002")], { account: owner.account });
+    const newFee = await factory.read.creationFee();
+    expect(newFee).to.equal(parseEther("0.002"));
+  });
+
+  it("Factory: no-owner no puede cambiar la tarifa de creacion", async function () {
+    await expectRevert(
+      factory.write.setCreationFee([parseEther("0.002")], { account: profesor.account }),
+      "Solo el owner"
+    );
+  });
+
+  it("Factory: owner puede retirar las tarifas acumuladas", async function () {
+    const p1 = generateHash(1, profeSalt, profesor.account.address);
+    await factory.write.createGame(
+      [1n, 1n, metadataURI, diplomaURI, [p1], entryFee],
+      { account: profesor.account, value: creationFee }
+    );
+    await factory.write.withdrawFees({ account: owner.account });
   });
 
 });

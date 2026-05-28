@@ -6,6 +6,10 @@ import "./KahootGame.sol";
 contract KahootFactory {
     KahootGame[] public games;
 
+    // ─── Ownership & Fee ──────────────────────────────────────────────────────
+    address public owner;
+    uint256 public creationFee;
+
     // ─── Leaderboard Global (Top 10) ──────────────────────────────────────────
     mapping(address => uint256) public totalDiplomasWon;
     address[10] public topJugadores;
@@ -14,6 +18,29 @@ contract KahootFactory {
 
     event GameCreated(address indexed gameAddress, address indexed professor);
     event LeaderboardUpdated(address indexed student, uint256 newTotal);
+    event CreationFeeUpdated(uint256 oldFee, uint256 newFee);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Solo el owner");
+        _;
+    }
+
+    constructor(uint256 _creationFee) {
+        owner = msg.sender;
+        creationFee = _creationFee;
+    }
+
+    function setCreationFee(uint256 _newFee) external onlyOwner {
+        emit CreationFeeUpdated(creationFee, _newFee);
+        creationFee = _newFee;
+    }
+
+    function withdrawFees() external onlyOwner {
+        uint256 balance = address(this).balance;
+        require(balance > 0, "Sin fondos");
+        (bool ok, ) = owner.call{value: balance}("");
+        require(ok, "Transferencia fallida");
+    }
 
     function createGame(
         uint256 _passingScore,
@@ -22,7 +49,8 @@ contract KahootFactory {
         string calldata _diplomaTokenURI,
         bytes32[] calldata _correctAnswerCommits,
         uint256 _entryFee
-    ) external returns (address) {
+    ) external payable returns (address) {
+        require(msg.value >= creationFee, "Tarifa de creacion insuficiente");
         KahootGame newGame = new KahootGame(
             address(this),
             msg.sender,

@@ -12,6 +12,7 @@ describe("KahootGame - Fases y Roles", function () {
   const diplomaURI = "ipfs://QmMockDiploma...";
   const profeSalt = "secretoProfe";
   const entryFee = parseEther("0.01");
+  const creationFee = parseEther("0.001");
 
   function generateHash(opcion, salt, address) {
     return keccak256(
@@ -41,11 +42,11 @@ describe("KahootGame - Fases y Roles", function () {
     const walletClients = await viem.getWalletClients();
     [owner, profesor, alumnoHonesto, alumnoTramposo, alumnoExtra] = walletClients;
 
-    factory = await viem.deployContract("KahootFactory");
+    factory = await viem.deployContract("KahootFactory", [creationFee]);
     const hashRespuesta1 = generateHash(1, profeSalt, profesor.account.address);
     await factory.write.createGame(
       [1n, 1n, metadataURI, diplomaURI, [hashRespuesta1], entryFee],
-      { account: profesor.account }
+      { account: profesor.account, value: creationFee }
     );
     const gameAddress = await factory.read.games([0n]);
     game = await viem.getContractAt("KahootGame", gameAddress);
@@ -82,7 +83,7 @@ describe("KahootGame - Fases y Roles", function () {
   it("Profesor no puede abrir pregunta 2 si la pregunta 1 está en commit", async function () {
     const p1 = generateHash(1, profeSalt, profesor.account.address);
     const p2 = generateHash(2, profeSalt, profesor.account.address);
-    await factory.write.createGame([1n, 2n, metadataURI, diplomaURI, [p1, p2], entryFee], { account: profesor.account });
+    await factory.write.createGame([1n, 2n, metadataURI, diplomaURI, [p1, p2], entryFee], { account: profesor.account, value: creationFee });
     const gameAddr = await factory.read.games([1n]);
     const game2 = await viem.getContractAt("KahootGame", gameAddr);
 
@@ -97,7 +98,7 @@ describe("KahootGame - Fases y Roles", function () {
   it("Profesor no puede abrir pregunta 2 si la pregunta 1 está en reveal", async function () {
     const p1 = generateHash(1, profeSalt, profesor.account.address);
     const p2 = generateHash(2, profeSalt, profesor.account.address);
-    await factory.write.createGame([1n, 2n, metadataURI, diplomaURI, [p1, p2], entryFee], { account: profesor.account });
+    await factory.write.createGame([1n, 2n, metadataURI, diplomaURI, [p1, p2], entryFee], { account: profesor.account, value: creationFee });
     const gameAddr = await factory.read.games([1n]);
     const game2 = await viem.getContractAt("KahootGame", gameAddr);
 
@@ -116,7 +117,7 @@ describe("KahootGame - Fases y Roles", function () {
   it("advanceToNextQuestion falla si la fase actual es commit (no reveal)", async function () {
     const p1 = generateHash(1, profeSalt, profesor.account.address);
     const p2 = generateHash(2, profeSalt, profesor.account.address);
-    await factory.write.createGame([1n, 2n, metadataURI, diplomaURI, [p1, p2], entryFee], { account: profesor.account });
+    await factory.write.createGame([1n, 2n, metadataURI, diplomaURI, [p1, p2], entryFee], { account: profesor.account, value: creationFee });
     const gameAddr = await factory.read.games([1n]);
     const game2 = await viem.getContractAt("KahootGame", gameAddr);
 

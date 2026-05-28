@@ -13,6 +13,7 @@ describe("KahootGame - Rankings y Distribución de Premios", function () {
   const diplomaURI = "ipfs://QmMockDiploma...";
   const profeSalt = "secretoProfe";
   const entryFee = parseEther("0.01");
+  const creationFee = parseEther("0.001");
 
   function generateHash(opcion, salt, address) {
     return keccak256(encodePacked(["uint8", "string", "address"], [opcion, salt, address]));
@@ -38,7 +39,7 @@ describe("KahootGame - Rankings y Distribución de Premios", function () {
     a3 = clients[4];
     a4 = clients[5];
     a5 = clients[6];
-    factory = await viem.deployContract("KahootFactory");
+    factory = await viem.deployContract("KahootFactory", [creationFee]);
   });
 
   // ─── Helper: juego de 1 pregunta ────────────────────────────────────────────
@@ -52,7 +53,7 @@ describe("KahootGame - Rankings y Distribución de Premios", function () {
     const commit = generateHash(1, profeSalt, profesor.account.address);
     await factory.write.createGame(
       [1n, 1n, metadataURI, diplomaURI, [commit], entryFee],
-      { account: profesor.account }
+      { account: profesor.account, value: creationFee }
     );
     const count = await factory.read.getGamesCount();
     const gameAddr = await factory.read.games([count - 1n]);
@@ -95,7 +96,7 @@ describe("KahootGame - Rankings y Distribución de Premios", function () {
 
     await factory.write.createGame(
       [2n, 3n, metadataURI, diplomaURI, [p1, p2, p3], entryFee],
-      { account: profesor.account }
+      { account: profesor.account, value: creationFee }
     );
     const gameAddr = await factory.read.games([0n]);
     const game = await viem.getContractAt("KahootGame", gameAddr);
@@ -260,7 +261,7 @@ describe("KahootGame - Rankings y Distribución de Premios", function () {
     const commit = generateHash(1, profeSalt, profesor.account.address);
     await factory.write.createGame(
       [1n, 1n, metadataURI, diplomaURI, [commit], 0n],
-      { account: profesor.account }
+      { account: profesor.account, value: creationFee }
     );
     const gameAddr = await factory.read.games([0n]);
     const game = await viem.getContractAt("KahootGame", gameAddr);

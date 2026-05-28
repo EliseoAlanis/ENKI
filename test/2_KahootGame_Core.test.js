@@ -12,6 +12,7 @@ describe("KahootGame - Flujo Principal (Core)", function () {
   const diplomaURI = "ipfs://QmMockDiploma...";
   const profeSalt = "secretoProfe";
   const entryFee = parseEther("0.01");
+  const creationFee = parseEther("0.001");
 
   function generateHash(opcion, salt, address) {
     return keccak256(
@@ -41,12 +42,12 @@ describe("KahootGame - Flujo Principal (Core)", function () {
     const walletClients = await viem.getWalletClients();
     [owner, profesor, alumnoHonesto, alumnoTramposo, alumnoExtra] = walletClients;
 
-    factory = await viem.deployContract("KahootFactory");
+    factory = await viem.deployContract("KahootFactory", [creationFee]);
 
     const hashRespuesta1 = generateHash(1, profeSalt, profesor.account.address);
     await factory.write.createGame(
       [1n, 1n, metadataURI, diplomaURI, [hashRespuesta1], entryFee],
-      { account: profesor.account }
+      { account: profesor.account, value: creationFee }
     );
 
     const gameAddress = await factory.read.games([0n]);
@@ -82,7 +83,7 @@ describe("KahootGame - Flujo Principal (Core)", function () {
 
     await factory.write.createGame(
       [2n, 3n, metadataURI, diplomaURI, [p1, p2, p3], entryFee],
-      { account: profesor.account }
+      { account: profesor.account, value: creationFee }
     );
     const game3Address = await factory.read.games([1n]);
     const game3 = await viem.getContractAt("KahootGame", game3Address);

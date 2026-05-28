@@ -12,6 +12,7 @@ describe("KahootGame - Diploma NFT y Reclamos", function () {
   const diplomaURI = "ipfs://QmMockDiploma...";
   const profeSalt = "secretoProfe";
   const entryFee = parseEther("0.01");
+  const creationFee = parseEther("0.001");
 
   function generateHash(opcion, salt, address) {
     return keccak256(
@@ -41,11 +42,11 @@ describe("KahootGame - Diploma NFT y Reclamos", function () {
     const walletClients = await viem.getWalletClients();
     [owner, profesor, alumnoHonesto, alumnoTramposo, alumnoExtra] = walletClients;
 
-    factory = await viem.deployContract("KahootFactory");
+    factory = await viem.deployContract("KahootFactory", [creationFee]);
     const hashRespuesta1 = generateHash(1, profeSalt, profesor.account.address);
     await factory.write.createGame(
       [1n, 1n, metadataURI, diplomaURI, [hashRespuesta1], entryFee],
-      { account: profesor.account }
+      { account: profesor.account, value: creationFee }
     );
     const gameAddress = await factory.read.games([0n]);
     game = await viem.getContractAt("KahootGame", gameAddress);
@@ -79,7 +80,7 @@ describe("KahootGame - Diploma NFT y Reclamos", function () {
 
     await factory.write.createGame(
       [2n, 2n, metadataURI, diplomaURI, [p1, p2], entryFee], 
-      { account: profesor.account }
+      { account: profesor.account, value: creationFee }
     );
     const gameAddr = await factory.read.games([1n]);
     const gameDesa = await viem.getContractAt("KahootGame", gameAddr);
