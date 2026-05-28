@@ -10,7 +10,7 @@ contract KahootFactory {
     mapping(address => uint256) public totalDiplomasWon;
     address[10] public topJugadores;
     uint256[10] public topBalances;
-    mapping(address => bool) public isValidGame;
+    mapping(address => bool) public isOfficialGame;
 
     event GameCreated(address indexed gameAddress, address indexed professor);
     event LeaderboardUpdated(address indexed student, uint256 newTotal);
@@ -34,7 +34,7 @@ contract KahootFactory {
             _entryFee
         );
         games.push(newGame);
-        isValidGame[address(newGame)] = true;
+        isOfficialGame[address(newGame)] = true;
         emit GameCreated(address(newGame), msg.sender);
 
         return address(newGame);
@@ -45,7 +45,7 @@ contract KahootFactory {
      * @dev Solo puede ser llamada por un contrato KahootGame válido creado por este Factory.
      */
     function recordDiplomaWin(address student) external {
-        require(isValidGame[msg.sender], "Llamada no autorizada");
+        require(isOfficialGame[msg.sender], "Hackeo detectado: Solo juegos oficiales pueden dar puntos");
 
         uint256 newTotal = totalDiplomasWon[student] + 1;
         totalDiplomasWon[student] = newTotal;
