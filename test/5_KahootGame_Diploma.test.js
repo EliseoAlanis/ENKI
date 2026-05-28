@@ -8,9 +8,10 @@ describe("KahootGame - Diploma NFT y Reclamos", function () {
   let owner, profesor, alumnoHonesto, alumnoTramposo, alumnoExtra;
   let viem;
 
-  const metadataURI = "ipfs://QmMockMetadata...";
   const diplomaURI = "ipfs://QmMockDiploma...";
   const profeSalt = "secretoProfe";
+  const enunciado = "¿Cuánto es 2+2?";
+  const opciones = ["A", "B", "C", "D"];
   const entryFee = parseEther("0.01");
   const creationFee = parseEther("0.001");
 
@@ -21,6 +22,18 @@ describe("KahootGame - Diploma NFT y Reclamos", function () {
         [opcion, salt, address]
       )
     );
+  }
+
+  function buildRonda(opcionCorrecta, profesorAddr) {
+    return {
+      hashVerificacionPregunta: keccak256(encodePacked(
+        ["string", "string", "string", "string", "string", "string"],
+        [enunciado, opciones[0], opciones[1], opciones[2], opciones[3], profeSalt]
+      )),
+      hashRespuestaCorrecta: generateHash(opcionCorrecta, profeSalt, profesorAddr),
+      commitPhaseOpen: false,
+      revealPhaseOpen: false,
+    };
   }
 
   async function expectRevert(promise, expectedReason) {
@@ -43,9 +56,9 @@ describe("KahootGame - Diploma NFT y Reclamos", function () {
     [owner, profesor, alumnoHonesto, alumnoTramposo, alumnoExtra] = walletClients;
 
     factory = await viem.deployContract("KahootFactory", [creationFee]);
-    const hashRespuesta1 = generateHash(1, profeSalt, profesor.account.address);
+    const r1 = buildRonda(1, profesor.account.address);
     await factory.write.createGame(
-      [1n, 1n, metadataURI, diplomaURI, [hashRespuesta1], entryFee],
+      [1n, 1n, diplomaURI, [r1], entryFee],
       { account: profesor.account, value: creationFee }
     );
     const gameAddress = await factory.read.games([0n]);
@@ -58,7 +71,7 @@ describe("KahootGame - Diploma NFT y Reclamos", function () {
   it("Proteccion de Doble Claim", async function () {
     await game.write.joinGame({ value: entryFee, account: alumnoHonesto.account });
 
-    await game.write.startNextQuestion({ account: profesor.account });
+    await game.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await game.write.commitAnswer([generateHash(1, "s1", alumnoHonesto.account.address)], { account: alumnoHonesto.account });
     
     await game.write.closeQuestionAndStartReveal([1, profeSalt], { account: profesor.account }); 
@@ -75,11 +88,11 @@ describe("KahootGame - Diploma NFT y Reclamos", function () {
   });
 
   it("Alumno desaprobado no puede reclamar diploma", async function () {
-    const p1 = generateHash(1, profeSalt, profesor.account.address);
-    const p2 = generateHash(2, profeSalt, profesor.account.address);
+    const r1d = buildRonda(1, profesor.account.address);
+    const r2d = buildRonda(2, profesor.account.address);
 
     await factory.write.createGame(
-      [2n, 2n, metadataURI, diplomaURI, [p1, p2], entryFee], 
+      [2n, 2n, diplomaURI, [r1d, r2d], entryFee], 
       { account: profesor.account, value: creationFee }
     );
     const gameAddr = await factory.read.games([1n]);
@@ -88,14 +101,14 @@ describe("KahootGame - Diploma NFT y Reclamos", function () {
     await gameDesa.write.joinGame({ value: entryFee, account: alumnoHonesto.account });
 
     // Q1
-    await gameDesa.write.startNextQuestion({ account: profesor.account });
+    await gameDesa.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await gameDesa.write.commitAnswer([generateHash(3, "wrong1", alumnoHonesto.account.address)],{ account: alumnoHonesto.account });
     await gameDesa.write.closeQuestionAndStartReveal([1, profeSalt], { account: profesor.account });
     await gameDesa.write.revealAnswer([0n, 3, "wrong1"], { account: alumnoHonesto.account });
     await gameDesa.write.advanceToNextQuestion({ account: profesor.account });
 
     // Q2
-    await gameDesa.write.startNextQuestion({ account: profesor.account });
+    await gameDesa.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await gameDesa.write.commitAnswer([generateHash(2, "right2", alumnoHonesto.account.address)],{ account: alumnoHonesto.account });
     await gameDesa.write.closeQuestionAndStartReveal([2, profeSalt], { account: profesor.account });
     await gameDesa.write.revealAnswer([1n, 2, "right2"], { account: alumnoHonesto.account });
@@ -119,7 +132,7 @@ describe("KahootGame - Diploma NFT y Reclamos", function () {
 
   it("Alumno que nunca jugó no puede reclamar diploma", async function () {
     await game.write.joinGame({ value: entryFee, account: alumnoHonesto.account });
-    await game.write.startNextQuestion({ account: profesor.account });
+    await game.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await game.write.commitAnswer([generateHash(1, "s1", alumnoHonesto.account.address)],{ account: alumnoHonesto.account });
     await game.write.closeQuestionAndStartReveal([1, profeSalt], { account: profesor.account });
     await game.write.revealAnswer([0n, 1, "s1"], { account: alumnoHonesto.account });

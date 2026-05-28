@@ -45,9 +45,8 @@ contract KahootFactory {
     function createGame(
         uint256 _passingScore,
         uint256 _totalQuestions,
-        string calldata _metadataURI,
         string calldata _diplomaTokenURI,
-        bytes32[] calldata _correctAnswerCommits,
+        KahootGame.RondaOculta[] calldata _rondas,
         uint256 _entryFee
     ) external payable returns (address) {
         require(msg.value >= creationFee, "Tarifa de creacion insuficiente");
@@ -56,9 +55,8 @@ contract KahootFactory {
             msg.sender,
             _passingScore,
             _totalQuestions,
-            _metadataURI,
             _diplomaTokenURI,
-            _correctAnswerCommits,
+            _rondas,
             _entryFee
         );
         games.push(newGame);

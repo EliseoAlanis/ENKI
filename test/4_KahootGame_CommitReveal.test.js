@@ -8,9 +8,10 @@ describe("KahootGame - Commit & Reveal Seguros", function () {
   let owner, profesor, alumnoHonesto, alumnoTramposo, alumnoExtra;
   let viem;
 
-  const metadataURI = "ipfs://QmMockMetadata...";
   const diplomaURI = "ipfs://QmMockDiploma...";
   const profeSalt = "secretoProfe";
+  const enunciado = "¿Cuánto es 2+2?";
+  const opciones = ["A", "B", "C", "D"];
   const entryFee = parseEther("0.01");
   const creationFee = parseEther("0.001");
 
@@ -21,6 +22,18 @@ describe("KahootGame - Commit & Reveal Seguros", function () {
         [opcion, salt, address]
       )
     );
+  }
+
+  function buildRonda(opcionCorrecta, profesorAddr) {
+    return {
+      hashVerificacionPregunta: keccak256(encodePacked(
+        ["string", "string", "string", "string", "string", "string"],
+        [enunciado, opciones[0], opciones[1], opciones[2], opciones[3], profeSalt]
+      )),
+      hashRespuestaCorrecta: generateHash(opcionCorrecta, profeSalt, profesorAddr),
+      commitPhaseOpen: false,
+      revealPhaseOpen: false,
+    };
   }
 
   async function expectRevert(promise, expectedReason) {
@@ -43,9 +56,9 @@ describe("KahootGame - Commit & Reveal Seguros", function () {
     [owner, profesor, alumnoHonesto, alumnoTramposo, alumnoExtra] = walletClients;
 
     factory = await viem.deployContract("KahootFactory", [creationFee]);
-    const hashRespuesta1 = generateHash(1, profeSalt, profesor.account.address);
+    const r1 = buildRonda(1, profesor.account.address);
     await factory.write.createGame(
-      [1n, 1n, metadataURI, diplomaURI, [hashRespuesta1], entryFee],
+      [1n, 1n, diplomaURI, [r1], entryFee],
       { account: profesor.account, value: creationFee }
     );
     const gameAddress = await factory.read.games([0n]);
@@ -56,7 +69,7 @@ describe("KahootGame - Commit & Reveal Seguros", function () {
     await game.write.joinGame({ value: entryFee, account: alumnoHonesto.account });
     await game.write.joinGame({ value: entryFee, account: alumnoTramposo.account });
 
-    await game.write.startNextQuestion({ account: profesor.account });
+    await game.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await game.write.commitAnswer([generateHash(1, "s1", alumnoHonesto.account.address)],{ account: alumnoHonesto.account });
     
     await game.write.closeQuestionAndStartReveal([1, profeSalt], { account: profesor.account });
@@ -69,7 +82,7 @@ describe("KahootGame - Commit & Reveal Seguros", function () {
 
   it("Commit de bytes32(0) debería fallar", async function () {
     await game.write.joinGame({ value: entryFee, account: alumnoHonesto.account });
-    await game.write.startNextQuestion({ account: profesor.account });
+    await game.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     const nullHash = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
     await expectRevert(
@@ -80,7 +93,7 @@ describe("KahootGame - Commit & Reveal Seguros", function () {
 
   it("No se puede hacer commit dos veces en la misma pregunta", async function () {
     await game.write.joinGame({ value: entryFee, account: alumnoHonesto.account });
-    await game.write.startNextQuestion({ account: profesor.account });
+    await game.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
 
     const hash = generateHash(1, "s1", alumnoHonesto.account.address);
     await game.write.commitAnswer([hash], { account: alumnoHonesto.account });
@@ -94,7 +107,7 @@ describe("KahootGame - Commit & Reveal Seguros", function () {
 
   it("No se puede hacer reveal dos veces", async function () {
     await game.write.joinGame({ value: entryFee, account: alumnoHonesto.account });
-    await game.write.startNextQuestion({ account: profesor.account });
+    await game.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await game.write.commitAnswer([generateHash(1, "s1", alumnoHonesto.account.address)],{ account: alumnoHonesto.account });
     
     await game.write.closeQuestionAndStartReveal([1, profeSalt], { account: profesor.account });
@@ -109,7 +122,7 @@ describe("KahootGame - Commit & Reveal Seguros", function () {
 
   it("Reveal con hash incorrecto (salt equivocado)", async function () {
     await game.write.joinGame({ value: entryFee, account: alumnoHonesto.account });
-    await game.write.startNextQuestion({ account: profesor.account });
+    await game.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await game.write.commitAnswer([generateHash(1, "mi_salt_real", alumnoHonesto.account.address)],{ account: alumnoHonesto.account });
     await game.write.closeQuestionAndStartReveal([1, profeSalt], { account: profesor.account });
 
@@ -121,7 +134,7 @@ describe("KahootGame - Commit & Reveal Seguros", function () {
 
   it("Reveal con opción distinta a la commiteada", async function () {
     await game.write.joinGame({ value: entryFee, account: alumnoHonesto.account });
-    await game.write.startNextQuestion({ account: profesor.account });
+    await game.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await game.write.commitAnswer([generateHash(1, "salt", alumnoHonesto.account.address)],{ account: alumnoHonesto.account });
     await game.write.closeQuestionAndStartReveal([1, profeSalt], { account: profesor.account });
 
@@ -133,7 +146,7 @@ describe("KahootGame - Commit & Reveal Seguros", function () {
 
   it("El Profesor no puede cambiar la respuesta correcta (Doble Commit-Reveal)", async function () {
     await game.write.joinGame({ value: entryFee, account: alumnoHonesto.account });
-    await game.write.startNextQuestion({ account: profesor.account });
+    await game.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     
     const hash = generateHash(1, "s1", alumnoHonesto.account.address);
     await game.write.commitAnswer([hash], { account: alumnoHonesto.account });

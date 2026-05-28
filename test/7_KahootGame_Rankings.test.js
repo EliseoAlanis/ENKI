@@ -9,14 +9,27 @@ describe("KahootGame - Rankings y Distribución de Premios", function () {
   let a1, a2, a3, a4, a5;
   let viem;
 
-  const metadataURI = "ipfs://QmMockMetadata...";
   const diplomaURI = "ipfs://QmMockDiploma...";
   const profeSalt = "secretoProfe";
+  const enunciado = "¿Cuánto es 2+2?";
+  const opciones = ["A", "B", "C", "D"];
   const entryFee = parseEther("0.01");
   const creationFee = parseEther("0.001");
 
   function generateHash(opcion, salt, address) {
     return keccak256(encodePacked(["uint8", "string", "address"], [opcion, salt, address]));
+  }
+
+  function buildRonda(opcionCorrecta, profesorAddr) {
+    return {
+      hashVerificacionPregunta: keccak256(encodePacked(
+        ["string", "string", "string", "string", "string", "string"],
+        [enunciado, opciones[0], opciones[1], opciones[2], opciones[3], profeSalt]
+      )),
+      hashRespuestaCorrecta: generateHash(opcionCorrecta, profeSalt, profesorAddr),
+      commitPhaseOpen: false,
+      revealPhaseOpen: false,
+    };
   }
 
   async function expectRevert(promise, expectedReason) {
@@ -50,9 +63,9 @@ describe("KahootGame - Rankings y Distribución de Premios", function () {
    * y finaliza el juego. Devuelve el contrato.
    */
   async function run1QuestionGame(players, correct) {
-    const commit = generateHash(1, profeSalt, profesor.account.address);
+    const r1 = buildRonda(1, profesor.account.address);
     await factory.write.createGame(
-      [1n, 1n, metadataURI, diplomaURI, [commit], entryFee],
+      [1n, 1n, diplomaURI, [r1], entryFee],
       { account: profesor.account, value: creationFee }
     );
     const count = await factory.read.getGamesCount();
@@ -63,7 +76,7 @@ describe("KahootGame - Rankings y Distribución de Premios", function () {
       await game.write.joinGame({ value: entryFee, account: p.account });
     }
 
-    await game.write.startNextQuestion({ account: profesor.account });
+    await game.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
 
     for (const p of players) {
       const option = correct.includes(p) ? 1 : 2;
@@ -90,12 +103,12 @@ describe("KahootGame - Rankings y Distribución de Premios", function () {
   it("topScoreValues correctos con 3 rangos distintos (5 jugadores, 3 preguntas)", async function () {
     // Scores finales: a1=3, a2=3, a3=2, a4=1, a5=0
     // prizePool = 5 * 0.01 ETH = 0.05 ETH
-    const p1 = generateHash(1, profeSalt, profesor.account.address);
-    const p2 = generateHash(2, profeSalt, profesor.account.address);
-    const p3 = generateHash(3, profeSalt, profesor.account.address);
+    const r1t = buildRonda(1, profesor.account.address);
+    const r2t = buildRonda(2, profesor.account.address);
+    const r3t = buildRonda(3, profesor.account.address);
 
     await factory.write.createGame(
-      [2n, 3n, metadataURI, diplomaURI, [p1, p2, p3], entryFee],
+      [2n, 3n, diplomaURI, [r1t, r2t, r3t], entryFee],
       { account: profesor.account, value: creationFee }
     );
     const gameAddr = await factory.read.games([0n]);
@@ -106,7 +119,7 @@ describe("KahootGame - Rankings y Distribución de Premios", function () {
     }
 
     // Q0 (correct=1): a1,a2,a3,a4 aciertan; a5 falla
-    await game.write.startNextQuestion({ account: profesor.account });
+    await game.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await game.write.commitAnswer([generateHash(1, "s", a1.account.address)], { account: a1.account });
     await game.write.commitAnswer([generateHash(1, "s", a2.account.address)], { account: a2.account });
     await game.write.commitAnswer([generateHash(1, "s", a3.account.address)], { account: a3.account });
@@ -121,7 +134,7 @@ describe("KahootGame - Rankings y Distribución de Premios", function () {
     await game.write.advanceToNextQuestion({ account: profesor.account });
 
     // Q1 (correct=2): a1,a2,a3 aciertan; a4,a5 fallan
-    await game.write.startNextQuestion({ account: profesor.account });
+    await game.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await game.write.commitAnswer([generateHash(2, "s", a1.account.address)], { account: a1.account });
     await game.write.commitAnswer([generateHash(2, "s", a2.account.address)], { account: a2.account });
     await game.write.commitAnswer([generateHash(2, "s", a3.account.address)], { account: a3.account });
@@ -136,7 +149,7 @@ describe("KahootGame - Rankings y Distribución de Premios", function () {
     await game.write.advanceToNextQuestion({ account: profesor.account });
 
     // Q2 (correct=3): a1,a2 aciertan; a3,a4,a5 fallan
-    await game.write.startNextQuestion({ account: profesor.account });
+    await game.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await game.write.commitAnswer([generateHash(3, "s", a1.account.address)], { account: a1.account });
     await game.write.commitAnswer([generateHash(3, "s", a2.account.address)], { account: a2.account });
     await game.write.commitAnswer([generateHash(1, "s", a3.account.address)], { account: a3.account });
@@ -258,16 +271,16 @@ describe("KahootGame - Rankings y Distribución de Premios", function () {
   });
 
   it("calculatePrizes falla si no hay pozo de premios (entryFee = 0)", async function () {
-    const commit = generateHash(1, profeSalt, profesor.account.address);
+    const r0 = buildRonda(1, profesor.account.address);
     await factory.write.createGame(
-      [1n, 1n, metadataURI, diplomaURI, [commit], 0n],
+      [1n, 1n, diplomaURI, [r0], 0n],
       { account: profesor.account, value: creationFee }
     );
     const gameAddr = await factory.read.games([0n]);
     const game = await viem.getContractAt("KahootGame", gameAddr);
 
     await game.write.joinGame({ value: 0n, account: a1.account });
-    await game.write.startNextQuestion({ account: profesor.account });
+    await game.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await game.write.commitAnswer(
       [generateHash(1, "s", a1.account.address)],
       { account: a1.account }

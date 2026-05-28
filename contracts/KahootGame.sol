@@ -44,18 +44,25 @@ contract KahootGame is ReentrancyGuard {
     uint256 public passingScore;
     uint256 public totalQuestions;
     uint256 public currentQuestionId;
-    string public metadataURI;
     string public diplomaTokenURI;
-    bytes32[] public correctAnswerCommits;
     mapping(uint256 => uint8) public revealedAnswers;
     bool public isFinished;
 
-    struct Question {
+    /**
+     * @notice Almacena los hashes pre-calculados de cada ronda (Doble Commit-Reveal).
+     * @dev hashVerificacionPregunta = keccak256(abi.encodePacked(enunciado, op[0], op[1], op[2], op[3], saltProfesor))
+     *      hashRespuestaCorrecta    = keccak256(abi.encodePacked(opcionCorrecta, saltProfesor, direccionProfesor))
+     *      Nota: abi.encodePacked con strings dinámicos puede tener colisiones teóricas;
+     *      es aceptable aquí porque el profesor controla y pre-computa ambos lados.
+     */
+    struct RondaOculta {
+        bytes32 hashVerificacionPregunta; // keccak256(enunciado + opciones[4] + saltProfesor)
+        bytes32 hashRespuestaCorrecta;    // keccak256(opcionCorrecta + saltProfesor + direccionProfesor)
         bool commitPhaseOpen;
         bool revealPhaseOpen;
     }
 
-    mapping(uint256 => Question) public questions;
+    RondaOculta[] public listaDeRondas;
     mapping(uint256 => mapping(address => bytes32)) public commits;
     mapping(address => uint256) public scores;
     mapping(address => bool) public hasClaimed; // diploma
@@ -81,6 +88,8 @@ contract KahootGame is ReentrancyGuard {
 
     // ─── Eventos ───────────────────────────────────────────────────────────────
     event QuestionOpened(uint256 indexed questionId);
+    /// @notice Emitido cuando el profesor revela el enunciado; el frontend renderiza la pregunta en tiempo real.
+    event QuestionRevealed(uint256 indexed questionId, string enunciado, string[4] opciones);
     event RevealPhaseStarted(uint256 indexed questionId);
     event DiplomaClaimed(address indexed student);
     event PlayerJoined(address indexed player, uint256 feePaid);
@@ -99,24 +108,25 @@ contract KahootGame is ReentrancyGuard {
         address _professor,
         uint256 _passingScore,
         uint256 _totalQuestions,
-        string memory _metadataURI,
         string memory _diplomaTokenURI,
-        bytes32[] memory _correctAnswerCommits,
+        RondaOculta[] memory _rondas,
         uint256 _entryFee
     ) {
         require(_totalQuestions > 0, "Debe tener preguntas");
         require(_passingScore > 0, "Puntaje invalido");
         require(_passingScore <= _totalQuestions, "Puntaje mayor al total");
-        require(_correctAnswerCommits.length == _totalQuestions, "Respuestas no coinciden");
+        require(_rondas.length == _totalQuestions, "Rondas no coinciden con totalQuestions");
 
         factory = _factory;
         professor = _professor;
         passingScore = _passingScore;
         totalQuestions = _totalQuestions;
-        metadataURI = _metadataURI;
         diplomaTokenURI = _diplomaTokenURI;
-        correctAnswerCommits = _correctAnswerCommits;
         entryFee = _entryFee;
+
+        for (uint256 i = 0; i < _rondas.length; i++) {
+            listaDeRondas.push(_rondas[i]);
+        }
 
         diplomaContract = new DiplomaNFT(address(this));
     }
@@ -128,7 +138,7 @@ contract KahootGame is ReentrancyGuard {
      * Debe llamarse antes de commitAnswer(). El ETH enviado se suma al prizePool.
      */
     function joinGame() external payable {
-        require(currentQuestionId == 0 && !questions[0].commitPhaseOpen, "El juego ya comenzo o ya termino");
+        require(currentQuestionId == 0 && !listaDeRondas[0].commitPhaseOpen, "El juego ya comenzo o ya termino");
         require(!hasJoined[msg.sender], "Ya te uniste al juego");
         require(msg.value == entryFee, "Debes enviar exactamente el entryFee");
 
@@ -142,49 +152,61 @@ contract KahootGame is ReentrancyGuard {
 
     // ─── Flujo del juego ───────────────────────────────────────────────────────
 
-    function startNextQuestion() external onlyProfessor {
+    function startNextQuestion(
+        string calldata _enunciado,
+        string[4] calldata _opciones,
+        string calldata _saltProfesor
+    ) external onlyProfessor {
         require(!isFinished, "El juego termino");
 
         uint256 currentQ = currentQuestionId;
         if (currentQ > 0) {
             require(
-                !questions[currentQ - 1].commitPhaseOpen && !questions[currentQ - 1].revealPhaseOpen,
+                !listaDeRondas[currentQ - 1].commitPhaseOpen && !listaDeRondas[currentQ - 1].revealPhaseOpen,
                 "Hay una pregunta activa"
             );
         }
         require(currentQ < totalQuestions, "No hay mas preguntas");
 
-        questions[currentQ].commitPhaseOpen = true;
+        bytes32 hashCalculado = keccak256(abi.encodePacked(
+            _enunciado,
+            _opciones[0], _opciones[1], _opciones[2], _opciones[3],
+            _saltProfesor
+        ));
+        require(hashCalculado == listaDeRondas[currentQ].hashVerificacionPregunta, "Hash de pregunta invalido");
+
+        listaDeRondas[currentQ].commitPhaseOpen = true;
         emit QuestionOpened(currentQ);
+        emit QuestionRevealed(currentQ, _enunciado, _opciones);
     }
 
     function commitAnswer(bytes32 _commitHash) external {
         require(hasJoined[msg.sender], "Debes unirte primero con joinGame()");
         uint256 currentQ = currentQuestionId;
-        require(questions[currentQ].commitPhaseOpen, "Fase de commit cerrada");
+        require(listaDeRondas[currentQ].commitPhaseOpen, "Fase de commit cerrada");
         require(_commitHash != bytes32(0), "Hash nulo");
         require(commits[currentQ][msg.sender] == bytes32(0), "Ya respondiste esta pregunta");
 
         commits[currentQ][msg.sender] = _commitHash;
     }
 
-    function closeQuestionAndStartReveal(uint8 _correctOption, string memory _professorSalt) external onlyProfessor {
+    function closeQuestionAndStartReveal(uint8 _correctOption, string calldata _professorSalt) external onlyProfessor {
         uint256 currentQ = currentQuestionId;
-        require(questions[currentQ].commitPhaseOpen, "No esta en fase de commit");
+        require(listaDeRondas[currentQ].commitPhaseOpen, "No esta en fase de commit");
 
         bytes32 generatedHash = keccak256(abi.encodePacked(_correctOption, _professorSalt, msg.sender));
-        require(generatedHash == correctAnswerCommits[currentQ], "Hash de respuesta incorrecto");
+        require(generatedHash == listaDeRondas[currentQ].hashRespuestaCorrecta, "Hash de respuesta incorrecto");
 
         revealedAnswers[currentQ] = _correctOption;
-        questions[currentQ].commitPhaseOpen = false;
-        questions[currentQ].revealPhaseOpen = true;
+        listaDeRondas[currentQ].commitPhaseOpen = false;
+        listaDeRondas[currentQ].revealPhaseOpen = true;
 
         emit RevealPhaseStarted(currentQ);
     }
 
     function revealAnswer(uint256 _questionId, uint8 _option, string memory _salt) external {
         require(hasJoined[msg.sender], "Debes unirte primero con joinGame()");
-        require(questions[_questionId].revealPhaseOpen, "Fase de reveal cerrada");
+        require(listaDeRondas[_questionId].revealPhaseOpen, "Fase de reveal cerrada");
         bytes32 storedCommit = commits[_questionId][msg.sender];
         require(storedCommit != bytes32(0), "No hiciste commit en esta pregunta");
 
@@ -206,9 +228,9 @@ contract KahootGame is ReentrancyGuard {
 
     function advanceToNextQuestion() external onlyProfessor {
         uint256 currentQ = currentQuestionId;
-        require(questions[currentQ].revealPhaseOpen, "Primero hay que abrir los reveals");
+        require(listaDeRondas[currentQ].revealPhaseOpen, "Primero hay que abrir los reveals");
 
-        questions[currentQ].revealPhaseOpen = false;
+        listaDeRondas[currentQ].revealPhaseOpen = false;
         currentQuestionId += 1;
 
         if (currentQuestionId == totalQuestions) {

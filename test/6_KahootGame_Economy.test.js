@@ -9,9 +9,10 @@ describe("KahootGame - Economía y Prize Pool", function () {
   let a1, a2, a3, a4, a5;
   let viem;
 
-  const metadataURI = "ipfs://QmMockMetadata...";
   const diplomaURI = "ipfs://QmMockDiploma...";
   const profeSalt = "secretoProfe";
+  const enunciado = "¿Cuánto es 2+2?";
+  const opciones = ["A", "B", "C", "D"];
   const entryFee = parseEther("0.01");
   const creationFee = parseEther("0.001");
 
@@ -22,6 +23,18 @@ describe("KahootGame - Economía y Prize Pool", function () {
         [opcion, salt, address]
       )
     );
+  }
+
+  function buildRonda(opcionCorrecta, profesorAddr) {
+    return {
+      hashVerificacionPregunta: keccak256(encodePacked(
+        ["string", "string", "string", "string", "string", "string"],
+        [enunciado, opciones[0], opciones[1], opciones[2], opciones[3], profeSalt]
+      )),
+      hashRespuestaCorrecta: generateHash(opcionCorrecta, profeSalt, profesorAddr),
+      commitPhaseOpen: false,
+      revealPhaseOpen: false,
+    };
   }
 
   async function expectRevert(promise, expectedReason) {
@@ -53,8 +66,8 @@ describe("KahootGame - Economía y Prize Pool", function () {
   });
 
   it("joinGame fallos: falla si el monto enviado no es exactamente el entryFee", async function () {
-    const p1 = generateHash(1, profeSalt, profesor.account.address);
-    await factory.write.createGame([1n, 1n, metadataURI, diplomaURI, [p1], entryFee], { account: profesor.account, value: creationFee });
+    const r1e = buildRonda(1, profesor.account.address);
+    await factory.write.createGame([1n, 1n, diplomaURI, [r1e], entryFee], { account: profesor.account, value: creationFee });
     const gameAddr = await factory.read.games([0n]);
     const prizeGame = await viem.getContractAt("KahootGame", gameAddr);
 
@@ -69,23 +82,23 @@ describe("KahootGame - Economía y Prize Pool", function () {
   });
 
   it("calculatePrizes prematuro: falla si el juego no ha terminado", async function () {
-    const p1 = generateHash(1, profeSalt, profesor.account.address);
-    await factory.write.createGame([1n, 1n, metadataURI, diplomaURI, [p1], entryFee], { account: profesor.account, value: creationFee });
-    const gameAddr = await factory.read.games([0n]);
-    const prizeGame = await viem.getContractAt("KahootGame", gameAddr);
+    const r1p = buildRonda(1, profesor.account.address);
+    await factory.write.createGame([1n, 1n, diplomaURI, [r1p], entryFee], { account: profesor.account, value: creationFee });
+    const gameAddr2 = await factory.read.games([0n]);
+    const prizeGame2 = await viem.getContractAt("KahootGame", gameAddr2);
 
     await expectRevert(
-      prizeGame.write.calculatePrizes({ account: a1.account }),
+      prizeGame2.write.calculatePrizes({ account: a1.account }),
       "El juego no ha terminado"
     );
   });
 
   it("Matemática, calculatePrizes y claimPrize (Ganadores y Profesor)", async function () {
-    const p1 = generateHash(1, profeSalt, profesor.account.address);
-    const p2 = generateHash(2, profeSalt, profesor.account.address);
-    const p3 = generateHash(3, profeSalt, profesor.account.address);
+    const r1m = buildRonda(1, profesor.account.address);
+    const r2m = buildRonda(2, profesor.account.address);
+    const r3m = buildRonda(3, profesor.account.address);
 
-    await factory.write.createGame([2n, 3n, metadataURI, diplomaURI, [p1, p2, p3], entryFee], { account: profesor.account, value: creationFee });
+    await factory.write.createGame([2n, 3n, diplomaURI, [r1m, r2m, r3m], entryFee], { account: profesor.account, value: creationFee });
     const gameAddr = await factory.read.games([0n]);
     const prizeGame = await viem.getContractAt("KahootGame", gameAddr);
 
@@ -96,7 +109,7 @@ describe("KahootGame - Economía y Prize Pool", function () {
     await prizeGame.write.joinGame({ value: entryFee, account: a5.account });
 
     // --- PREGUNTA 1 ---
-    await prizeGame.write.startNextQuestion({ account: profesor.account });
+    await prizeGame.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await prizeGame.write.commitAnswer([generateHash(1, "s", a1.account.address)], { account: a1.account });
     await prizeGame.write.commitAnswer([generateHash(1, "s", a2.account.address)], { account: a2.account });
     await prizeGame.write.commitAnswer([generateHash(1, "s", a3.account.address)], { account: a3.account });
@@ -112,7 +125,7 @@ describe("KahootGame - Economía y Prize Pool", function () {
     await prizeGame.write.advanceToNextQuestion({ account: profesor.account });
 
     // --- PREGUNTA 2 ---
-    await prizeGame.write.startNextQuestion({ account: profesor.account });
+    await prizeGame.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await prizeGame.write.commitAnswer([generateHash(2, "s", a1.account.address)], { account: a1.account });
     await prizeGame.write.commitAnswer([generateHash(2, "s", a2.account.address)], { account: a2.account });
     await prizeGame.write.commitAnswer([generateHash(2, "s", a3.account.address)], { account: a3.account });
@@ -128,7 +141,7 @@ describe("KahootGame - Economía y Prize Pool", function () {
     await prizeGame.write.advanceToNextQuestion({ account: profesor.account });
 
     // --- PREGUNTA 3 ---
-    await prizeGame.write.startNextQuestion({ account: profesor.account });
+    await prizeGame.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await prizeGame.write.commitAnswer([generateHash(3, "s", a1.account.address)], { account: a1.account });
     await prizeGame.write.commitAnswer([generateHash(3, "s", a2.account.address)], { account: a2.account });
     await prizeGame.write.commitAnswer([generateHash(1, "s", a3.account.address)], { account: a3.account });
@@ -163,10 +176,10 @@ describe("KahootGame - Economía y Prize Pool", function () {
   });
 
   it("claimPrize bloqueos (Reverts): Perdedor no puede retirar, y ganador no puede retirar dos veces", async function () {
-    const p1 = generateHash(1, profeSalt, profesor.account.address);
-    const p2 = generateHash(2, profeSalt, profesor.account.address);
-    const p3 = generateHash(3, profeSalt, profesor.account.address);
-    await factory.write.createGame([1n, 3n, metadataURI, diplomaURI, [p1, p2, p3], entryFee], { account: profesor.account, value: creationFee });
+    const r1c = buildRonda(1, profesor.account.address);
+    const r2c = buildRonda(2, profesor.account.address);
+    const r3c = buildRonda(3, profesor.account.address);
+    await factory.write.createGame([1n, 3n, diplomaURI, [r1c, r2c, r3c], entryFee], { account: profesor.account, value: creationFee });
     const gameAddr = await factory.read.games([0n]);
     const lastGame = await viem.getContractAt("KahootGame", gameAddr);
 
@@ -176,7 +189,7 @@ describe("KahootGame - Economía y Prize Pool", function () {
     await lastGame.write.joinGame({ value: entryFee, account: a4.account });
 
     // PREGUNTA 1
-    await lastGame.write.startNextQuestion({ account: profesor.account });
+    await lastGame.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await lastGame.write.commitAnswer([generateHash(1, "s", a1.account.address)], { account: a1.account });
     await lastGame.write.commitAnswer([generateHash(1, "s", a2.account.address)], { account: a2.account });
     await lastGame.write.commitAnswer([generateHash(1, "s", a3.account.address)], { account: a3.account });
@@ -189,7 +202,7 @@ describe("KahootGame - Economía y Prize Pool", function () {
     await lastGame.write.advanceToNextQuestion({ account: profesor.account });
 
     // PREGUNTA 2
-    await lastGame.write.startNextQuestion({ account: profesor.account });
+    await lastGame.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await lastGame.write.commitAnswer([generateHash(2, "s", a1.account.address)], { account: a1.account });
     await lastGame.write.commitAnswer([generateHash(2, "s", a2.account.address)], { account: a2.account });
     await lastGame.write.commitAnswer([generateHash(1, "s", a3.account.address)], { account: a3.account });
@@ -202,7 +215,7 @@ describe("KahootGame - Economía y Prize Pool", function () {
     await lastGame.write.advanceToNextQuestion({ account: profesor.account });
 
     // PREGUNTA 3
-    await lastGame.write.startNextQuestion({ account: profesor.account });
+    await lastGame.write.startNextQuestion([enunciado, opciones, profeSalt], { account: profesor.account });
     await lastGame.write.commitAnswer([generateHash(3, "s", a1.account.address)], { account: a1.account });
     await lastGame.write.commitAnswer([generateHash(1, "s", a2.account.address)], { account: a2.account });
     await lastGame.write.commitAnswer([generateHash(1, "s", a3.account.address)], { account: a3.account });
