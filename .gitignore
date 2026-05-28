@@ -1,6 +1,8 @@
 # Node modules
 /node_modules
 
+
+.idea/
 # Compilation output
 /dist
 

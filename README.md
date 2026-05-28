@@ -1,57 +1,57 @@
-# Sample Hardhat 3 Beta Project (`node:test` and `viem`)
+# Kahoot Web3 Descentralizado con Prize Pool
 
-This project showcases a Hardhat 3 Beta project using the native Node.js test runner (`node:test`) and the `viem` library for Ethereum interactions.
+Bienvenido al repositorio de **ENKI**, un sistema descentralizado de Trivia construido sobre Ethereum, que incorpora un Prize Pool y la entrega de Diplomas en formato NFT.
 
-To learn more about the Hardhat 3 Beta, please visit the [Getting Started guide](https://hardhat.org/docs/getting-started#getting-started-with-hardhat-3). To share your feedback, join our [Hardhat 3 Beta](https://hardhat.org/hardhat3-beta-telegram-group) Telegram group or [open an issue](https://github.com/NomicFoundation/hardhat/issues/new) in our GitHub issue tracker.
+## Características Principales
 
-## Project Overview
+- **Patrón Commit-Reveal Seguro:** Evita que los alumnos copien las respuestas de otros mirando las transacciones pendientes en la mempool. Los estudiantes envían un hash de su respuesta (Commit) y luego revelan la opción elegida (Reveal).
+- **Prize Pool (Pozo de Premios):** Cada estudiante paga un *entry fee* (cuota de entrada) en ETH para participar. Todo lo recaudado forma un pozo de premios que se distribuye automáticamente de la siguiente manera al finalizar el juego:
+  - 🥇 **1er Puesto (Puntaje más alto):** 60% del pozo.
+  - 🥈 **2do Puesto:** 20% del pozo.
+  - 🥉 **3er Puesto:** 10% del pozo.
+  - 👨‍🏫 **Profesor:** 10% del pozo (más premios vacantes o sobrantes por redondeo).
+- **Diploma NFT:** Los alumnos que superan el puntaje mínimo de aprobación (Passing Score) tienen derecho a mintear un NFT intransferible que acredita su conocimiento en la blockchain.
+- **Factory Pattern:** El sistema permite a cualquier profesor crear su propia partida (instancia de KahootGame) estableciendo la cantidad de preguntas, el puntaje mínimo y el costo de entrada a través de `KahootFactory`.
+- **Mitigación de Race Conditions:** Protecciones robustas que evitan que los alumnos se unan a un juego en progreso una vez que ya se abrió la primera pregunta.
 
-This example project includes:
+## Requisitos Previos
 
-- A simple Hardhat configuration file.
-- Foundry-compatible Solidity unit tests.
-- TypeScript integration tests using [`node:test`](nodejs.org/api/test.html), the new Node.js native test runner, and [`viem`](https://viem.sh/).
-- Examples demonstrating how to connect to different types of networks, including locally simulating OP mainnet.
+- [Node.js](https://nodejs.org/es/) v18+ 
+- Un gestor de paquetes como `npm` o `yarn`
 
-## Usage
+## Instalación
 
-### Running Tests
+1. Clona este repositorio y navega hasta el directorio del proyecto.
+2. Instala las dependencias del proyecto ejecutando:
 
-To run all the tests in the project, execute the following command:
+```bash
+npm install
+```
 
-```shell
+## Compilación
+
+Para compilar los contratos inteligentes (escritos en Solidity ^0.8.20), ejecuta:
+
+```bash
+npx hardhat compile
+```
+
+Esto generará los artifacts necesarios dentro de la carpeta `artifacts/`.
+
+## Tests
+
+El proyecto cuenta con una cobertura absoluta (100%) a través de una rigurosa suite de pruebas unitarias y de integración que verifica tanto el *happy path* como todos los posibles *edge cases* (ataques de replay, colisión de fases, commits nulos y condiciones de carrera).
+
+Para correr los tests utilizando **Node:Test** y **Viem**, ejecuta:
+
+```bash
 npx hardhat test
 ```
 
-You can also selectively run the Solidity or `node:test` tests:
+Verás en consola el reporte detallado con todos los tests pasando exitosamente.
 
-```shell
-npx hardhat test solidity
-npx hardhat test nodejs
-```
+## Arquitectura de Contratos
 
-### Make a deployment to Sepolia
-
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
-
-To run the deployment to a local chain:
-
-```shell
-npx hardhat ignition deploy ignition/modules/Counter.ts
-```
-
-To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
-
-You can set the `SEPOLIA_PRIVATE_KEY` variable using the `hardhat-keystore` plugin or by setting it as an environment variable.
-
-To set the `SEPOLIA_PRIVATE_KEY` config variable using `hardhat-keystore`:
-
-```shell
-npx hardhat keystore set SEPOLIA_PRIVATE_KEY
-```
-
-After setting the variable, you can run the deployment with the Sepolia network:
-
-```shell
-npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
-```
+- `KahootFactory.sol`: Contrato principal para crear nuevas instancias de partidas.
+- `KahootGame.sol`: Maneja la lógica de la trivia, el registro (joinGame), las fases (commit y reveal) y el cálculo matemático del Prize Pool con un histograma dinámico eficiente en gas.
+- `DiplomaNFT.sol`: Extensión de ERC721 que emite el certificado para los alumnos aprobados.
