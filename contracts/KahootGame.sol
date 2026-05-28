@@ -12,7 +12,8 @@ contract KahootGame {
     uint256 public currentQuestionId;
     string public metadataURI;
     string public diplomaTokenURI;
-    uint8[] public correctAnswers;
+    bytes32[] public correctAnswerCommits;
+    mapping(uint256 => uint8) public revealedAnswers;    
     bool public isFinished;
 
     struct Question {
@@ -37,23 +38,23 @@ contract KahootGame {
 
     constructor(
         address _professor,
-        uint256 _passingScore,
-        uint256 _totalQuestions,
-        string memory _metadataURI,
-        string memory _diplomaTokenURI,
-        uint8[] memory _correctAnswers
-    ) {
-        require(_totalQuestions > 0, "Debe tener preguntas");
-        require(_passingScore > 0, "Puntaje invalido");
-        require(_passingScore <= _totalQuestions, "Puntaje mayor al total");
-        require(_correctAnswers.length == _totalQuestions, "Respuestas no coinciden");
+    uint256 _passingScore,
+    uint256 _totalQuestions,
+    string memory _metadataURI,
+    string memory _diplomaTokenURI,
+    bytes32[] memory _correctAnswerCommits // <-- CAMBIO AQUÍ
+) {
+    require(_totalQuestions > 0, "Debe tener preguntas");
+    require(_passingScore > 0, "Puntaje invalido");
+    require(_passingScore <= _totalQuestions, "Puntaje mayor al total");
+    require(_correctAnswerCommits.length == _totalQuestions, "Respuestas no coinciden");
 
-        professor = _professor;
-        passingScore = _passingScore;
-        totalQuestions = _totalQuestions;
-        metadataURI = _metadataURI;
-        diplomaTokenURI = _diplomaTokenURI;
-        correctAnswers = _correctAnswers;
+    professor = _professor;
+    passingScore = _passingScore;
+    totalQuestions = _totalQuestions;
+    metadataURI = _metadataURI;
+    diplomaTokenURI = _diplomaTokenURI;
+    correctAnswerCommits = _correctAnswerCommits; // <-- CAMBIO AQUÍ`
 
         // CAMBIO CRÍTICO APLICADO: El contrato se pasa a sí mismo como argumento
         diplomaContract = new DiplomaNFT(address(this));
@@ -81,33 +82,39 @@ contract KahootGame {
         commits[currentQ][msg.sender] = _commitHash;
     }
 
-    function closeQuestionAndStartReveal() external onlyProfessor {
-        uint256 currentQ = currentQuestionId;
-        require(questions[currentQ].commitPhaseOpen, "No esta en commit");
+    function closeQuestionAndStartReveal(uint8 _correctOption, string memory _professorSalt) external onlyProfessor {
+    uint256 currentQ = currentQuestionId;
+    require(questions[currentQ].commitPhaseOpen, "No esta en commit");
 
-        questions[currentQ].commitPhaseOpen = false;
-        questions[currentQ].revealPhaseOpen = true;
+    // 1. Verificamos que lo que revela el profe coincida con el hash inicial
+    bytes32 generatedHash = keccak256(abi.encodePacked(_correctOption, _professorSalt, msg.sender));
+    require(generatedHash == correctAnswerCommits[currentQ], "Hash de respuesta incorrecto");
 
-        emit RevealPhaseStarted(currentQ);
-    }
+    // 2. Guardamos la respuesta descubierta para que el contrato pueda corregir a los alumnos
+    revealedAnswers[currentQ] = _correctOption;
+
+    // 3. Cambiamos de fase
+    questions[currentQ].commitPhaseOpen = false;
+    questions[currentQ].revealPhaseOpen = true;
+
+    emit RevealPhaseStarted(currentQ);
+}
 
     function revealAnswer(uint256 _questionId, uint8 _option, string memory _salt) external {
-        require(questions[_questionId].revealPhaseOpen, "Fase de reveal cerrada");
-        
-        bytes32 storedCommit = commits[_questionId][msg.sender];
-        require(storedCommit != bytes32(0), "No hiciste commit");
-        
-        // VULNERABILIDAD ARREGLADA: Atamos el hash a la billetera del que lo envia (msg.sender)
-        bytes32 generatedHash = keccak256(abi.encodePacked(_option, _salt, msg.sender));
-        require(generatedHash == storedCommit, "El hash no coincide");
+    require(questions[_questionId].revealPhaseOpen, "Fase de reveal cerrada");
+    bytes32 storedCommit = commits[_questionId][msg.sender];
+    require(storedCommit != bytes32(0), "No hiciste commit");
 
-        // Borramos el commit para evitar que revele dos veces
-        commits[_questionId][msg.sender] = bytes32(0); 
+    bytes32 generatedHash = keccak256(abi.encodePacked(_option, _salt, msg.sender));
+    require(generatedHash == storedCommit, "El hash no coincide");
 
-        if (_option == correctAnswers[_questionId]) {
-            scores[msg.sender] += 1;
-        }
+    commits[_questionId][msg.sender] = bytes32(0);
+
+    // CAMBIO: Comparamos contra la respuesta revelada por el profe en esta pregunta
+    if (_option == revealedAnswers[_questionId]) {
+        scores[msg.sender] += 1;
     }
+}
 
     function advanceToNextQuestion() external onlyProfessor {
         uint256 currentQ = currentQuestionId;
